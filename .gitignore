@@ -1,0 +1,6 @@
+.env
+data/
+unsloth_compiled_cache/
+__pycache__/
+*.pyc
+.venv/
