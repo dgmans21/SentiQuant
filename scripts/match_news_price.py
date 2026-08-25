@@ -12,8 +12,20 @@ import pandas as pd
 from collect_multi_sample import STOCKS
 
 NEWS_PATH = "data/raw/news_backfill.csv"
+CURATED_PATH = "data/raw/news_daily_curated.csv"  # 삼성전자/SK하이닉스 일일 큐레이션
 PRICE_PATH = "data/raw/price_history.csv"
 OUT_PATH = "data/processed/news_price_matched.csv"
+
+
+def load_news() -> pd.DataFrame:
+    import os
+
+    cols = ["stock", "sector", "date", "title", "description", "link"]
+    news = pd.read_csv(NEWS_PATH)[cols]
+    if os.path.exists(CURATED_PATH):
+        curated = pd.read_csv(CURATED_PATH)[cols]
+        news = pd.concat([news, curated], ignore_index=True)
+    return news.drop_duplicates(subset=["link"])
 
 
 def load_price_history() -> pd.DataFrame:
@@ -41,7 +53,7 @@ def match_one(news_date: pd.Timestamp, close_series: pd.Series):
 if __name__ == "__main__":
     import os
 
-    news = pd.read_csv(NEWS_PATH)
+    news = load_news()
     news["news_date"] = pd.to_datetime(news["date"], format="mixed", utc=True).dt.tz_convert(
         "Asia/Seoul"
     ).dt.tz_localize(None).dt.normalize()

@@ -1,42 +1,50 @@
-"""Phase 2: threshold-based labeling + time-based train/val/test split.
+"""Phase 2: threshold-based labeling + group-shuffle train/val/test split.
 
-Threshold: +-1.0% (validated earlier against this dataset's return_pct
-distribution -- gives a near-even 3-way class balance: ~33/34/33%).
+Split: dates are randomly shuffled (fixed seed) then cut 70/15/15, keeping
+each date whole in one split (no same-day leakage from near-duplicate
+same-event articles landing in both train and test). A periodic pick
+(e.g. every 7th date) was tried first and rejected -- it aligned with
+day-of-week effects and skewed label distributions per split.
 
-Split is by calendar date, not random shuffling: articles from the same
-day often cover the same market event (near-duplicate wording), so a
-random split could leak near-identical text across train/test and
-inflate eval scores. Sorting unique dates and cutting 70/15/15 keeps
-each date's articles entirely inside one split.
+Usage:
+    python scripts/label_and_split.py <value_column> <low_threshold> <high_threshold> <out_path> [seed]
+
+Examples:
+    python scripts/label_and_split.py return_pct -1.0 1.0 data/processed/news_labeled.csv 42
+    python scripts/label_and_split.py excess_return_pct -3.561 1.656 data/processed/news_labeled_excess.csv 184
+
+Seed picked via find_good_seed.py -- with only ~111 unique dates, a random
+group-split's per-split label balance varies a lot by seed, so the seed is
+chosen to minimize skew against the overall label distribution (based only
+on label counts, not any trained model, so no leakage into model selection).
 """
+import sys
+import random
 import pandas as pd
 
-THRESHOLD = 1.0
 IN_PATH = "data/processed/news_price_matched.csv"
-OUT_PATH = "data/processed/news_labeled.csv"
 
 
-def label(return_pct: float) -> str:
-    if return_pct > THRESHOLD:
+def label(value: float, low: float, high: float) -> str:
+    if value > high:
         return "상승"
-    if return_pct < -THRESHOLD:
+    if value < low:
         return "하락"
     return "중립"
 
 
 if __name__ == "__main__":
-    df = pd.read_csv(IN_PATH)
-    df["label"] = df["return_pct"].apply(label)
+    value_col = sys.argv[1] if len(sys.argv) > 1 else "return_pct"
+    low = float(sys.argv[2]) if len(sys.argv) > 2 else -1.0
+    high = float(sys.argv[3]) if len(sys.argv) > 3 else 1.0
+    out_path = sys.argv[4] if len(sys.argv) > 4 else "data/processed/news_labeled.csv"
+    seed = int(sys.argv[5]) if len(sys.argv) > 5 else 42
 
-    # Group-shuffle-split by date: every date stays whole in one split (no
-    # same-day leakage), but a fixed-seed random shuffle -- not a fixed
-    # period like every-7th-date -- avoids accidentally aligning with
-    # calendar cycles (e.g. day-of-week effects) that a periodic pick would
-    # otherwise systematically favor into one split.
-    import random
+    df = pd.read_csv(IN_PATH)
+    df["label"] = df[value_col].apply(lambda v: label(v, low, high))
 
     unique_dates = sorted(df["news_date"].unique())
-    rng = random.Random(42)
+    rng = random.Random(seed)
     shuffled = unique_dates[:]
     rng.shuffle(shuffled)
 
@@ -55,9 +63,9 @@ if __name__ == "__main__":
         return "test"
 
     df["split"] = df["news_date"].apply(assign_split)
-    df.to_csv(OUT_PATH, index=False, encoding="utf-8-sig")
+    df.to_csv(out_path, index=False, encoding="utf-8-sig")
 
-    print(f"threshold: +-{THRESHOLD}%")
+    print(f"value_col: {value_col}, threshold: [{low}, {high}]")
     print(f"total rows: {len(df)}")
     print(f"date range: {unique_dates[0]} ~ {unique_dates[-1]} ({len(unique_dates)} unique dates)")
 
@@ -67,4 +75,4 @@ if __name__ == "__main__":
     print("\n=== split별 라벨 분포 ===")
     print(df.groupby("split")["label"].value_counts(normalize=True).round(3))
 
-    print(f"\nsaved to {OUT_PATH}")
+    print(f"\nsaved to {out_path}")

@@ -1,14 +1,18 @@
 import pandas as pd
 
+import sys
+
 df = pd.read_csv("data/processed/news_price_matched.csv")
-r = df["return_pct"]
+col = sys.argv[1] if len(sys.argv) > 1 else "return_pct"
+r = df[col]
+print(f"컬럼: {col}\n")
 
 print("=== 분위수(percentile) ===")
 for p in [10, 20, 33, 40, 50, 60, 67, 80, 90]:
     print(f"{p}%: {r.quantile(p/100):.3f}")
 
 print("\n=== 고정 임계값 후보별 클래스 분포 ===")
-for t in [0.3, 0.5, 1.0, 1.5, 2.0]:
+for t in [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]:
     down = (r < -t).sum()
     neutral = ((r >= -t) & (r <= t)).sum()
     up = (r > t).sum()
