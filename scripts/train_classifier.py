@@ -20,7 +20,7 @@ import sys
 MODEL_NAME = "klue/bert-base"
 DATA_PATH = sys.argv[1] if len(sys.argv) > 1 else "data/processed/news_labeled.csv"
 OUT_DIR = sys.argv[2] if len(sys.argv) > 2 else "models/klue-bert-sentiment"
-LABEL2ID = {"하락": 0, "중립": 1, "상승": 2}
+LABEL2ID = {"부정": 0, "중립": 1, "긍정": 2}
 ID2LABEL = {v: k for k, v in LABEL2ID.items()}
 MAX_LENGTH = 256
 
@@ -94,8 +94,8 @@ if __name__ == "__main__":
     true_labels = preds.label_ids
     cm = confusion_matrix(true_labels, pred_labels, labels=[0, 1, 2])
     print("\n=== 혼동행렬 (행=실제, 열=예측) ===")
-    print("       하락예측 중립예측 상승예측")
-    for i, row_name in enumerate(["하락실제", "중립실제", "상승실제"]):
+    print("       부정예측 중립예측 긍정예측")
+    for i, row_name in enumerate(["부정실제", "중립실제", "긍정실제"]):
         print(row_name, cm[i])
 
     trainer.save_model(OUT_DIR)
