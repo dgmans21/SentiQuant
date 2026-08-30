@@ -1,62 +1,71 @@
 # SentiQuant
 
-AI 뉴스 기반 한국 주식 감성분석 프로젝트. 상세 배경/단계별 계획은 [project_roadmap.md](project_roadmap.md), 날짜별 상세 작업 기록은 [WORKLOG.md](WORKLOG.md) 참고. 이 문서는 **현재 상태 스냅샷**이다 — 새 세션(사람이든 AI든)이 여기서부터 이어갈 수 있도록 지금 무엇이 되어있고 무엇이 남았는지만 정리한다.
+한국 주식 뉴스의 논조(긍정/부정/중립)를 분류하고, 그 논조가 실제 주가와 관련이 있는지 **정직하게** 검증한 개인 프로젝트입니다.
 
-## 환경
+> "뉴스로 내일 주가를 맞힐 수 있는가"라는 첫 가설은 기각됐습니다. 대신 "이 기사의 논조가 무엇인가"로 과제를 다시 정의했고, 그 결과를 과대포장하지 않기 위해 스스로 발견한 평가 버그를 고치고, 통계적으로 유의하지만 작은 효과크기를 있는 그대로 보고했습니다.
 
-- Conda 환경: `unsloth_env` (Python 3.12) — `conda activate unsloth_env`
-- PyTorch 2.11.0+cu130, GPU: RTX 4060 Ti 8GB (로컬)
-- 핵심 패키지: unsloth, transformers, peft, trl, bitsandbytes, scikit-learn
-- API 키: `.env` 파일에 `NAVER_API_KEY_ID`, `NAVER_API_KEY` (NAVER Cloud Platform "NAVER API HUB" 뉴스검색). 발급 관련 함정은 WORKLOG 2026-08-23 참고.
+전체 스토리(그래프·스크린샷 포함)는 [`portfolio/sentiquant.html`](portfolio/sentiquant.html)에, 날짜별 상세 작업 기록은 [WORKLOG.md](WORKLOG.md)에 있습니다.
 
-## 지금 상태 (2026-08-27 기준)
+## 핵심 결과
 
-**핵심 설계 결정 (가장 중요)**: 처음엔 "뉴스 → 다음날 주가 등락(상승/하락/중립)"을 라벨로 학습시켰으나 성능이 찍기 수준(~33%)을 못 넘김. **"뉴스만으로 익일 주가를 예측하는 건 과도한 목표"라고 판단하고 방향 전환**: 라벨을 주가 변동이 아니라 **기사 자체의 논조(긍정/부정/중립/무관)**로 바꾸고, 주가는 학습 후 "논조가 실제 주가와 상관있는지" 검증하는 별도 단계로 이동시킴. **결과: test accuracy 38.5% → 81.3%로 대폭 개선, 가설이 실증됨.** 자세한 실험 결과와 이유는 WORKLOG 2026-08-26/27 참고.
-
-### 데이터 파이프라인 (완료)
-
-1. **수집**: 20종목(섹터 분산) × NAVER 뉴스검색 API + yfinance 주가 → `data/raw/news_backfill.csv` (21,286건), `data/raw/price_history.csv`, `data/raw/index_history.csv`(코스피 지수)
-   - 삼성전자·SK하이닉스는 뉴스량이 너무 많아 API 1000건 한도가 반나절 만에 소진됨 → 별도로 하루 80건씩 큐레이션(`collect_news_curated.py`)해서 누적 중. **사용자가 매일 직접 수동 실행**해야 함 (자동화 안 됨)
-2. **매칭**: 뉴스 발행일 → 다음 거래일 종가 변동률 계산 → `data/processed/news_price_matched.csv` (11,188건, `return_pct`/`excess_return_pct` 컬럼 포함)
-3. **논조 라벨링 (완료)**: Qwen3-4B(로컬, unsloth)로 각 기사의 긍정/부정/중립/**무관** 판정 → `data/processed/news_qwen_labeled.csv`
-   - 전체 11,188건 완료. 분포: 중립 5,017건(44.8%) / 긍정 3,172건(28.4%) / 부정 1,661건(14.8%) / **무관 1,333건(11.9%)** / 파싱 실패 5건
-4. **필터링 + split**: "무관"/파싱실패 제외 → 9,850건 → `scripts/split_qwen_labeled.py`로 날짜 그룹+랜덤셔플 split → `data/processed/news_sentiment_final.csv` (train 8,589/val 522/test 739)
-
-### 모델 — **현재 최종 모델: `models/klue-bert-qwen-sentiment`**
-
-| 모델 | 라벨 종류 | Test Accuracy | Test F1(macro) | 상태 |
-|---|---|---|---|---|
-| `klue-bert-sentiment`/`-return`/`-excess`/`-excess-v2` | 주가 기반(상승/하락/중립) | 25.7~38.5% | 25.8~38.5% | **폐기, 참고용 보존** |
-| **`klue-bert-qwen-sentiment`** | **논조 기반(긍정/부정/중립)** | **81.3%** | **79.3%** | **현재 최종 모델** |
-
-혼동행렬 기준 세 클래스 모두 회수율 73~87%로 균형 있게 구분됨 (한쪽으로 쏠리는 패턴 없음). git에는 `models/`가 통째로 안 올라가니(로컬 전용) 재현하려면 아래 "재현 방법" 참고.
-
-## 다음에 할 일 (우선순위 순)
-
-1. `klue-bert-qwen-sentiment` 모델로 "논조 예측 vs 실제 주가" 상관관계 사후 검증 분석 설계 (긍정 판정 기사들이 실제로 주가와 상관있는지 — 로드맵 원래 목표와 연결되는 지점)
-2. (병행, 느긋하게) 삼성전자·SK하이닉스 일일 큐레이션 계속 (현재 누적 404건, 3~5일치면 재학습에 포함 가능 — 논조 라벨은 날짜 다양성이 필수가 아니라서 예전보다 빨리 쓸 수 있음)
-3. Phase 4(Qwen3-4B LoRA로 요약/설명 생성) 또는 Phase 5+(GGUF 배포, FastAPI, React 대시보드)로 진행할지 결정
-
-### 재현 방법 (Qwen 라벨링부터 다시 하고 싶을 때)
-```
-python scripts\split_qwen_labeled.py
-python scripts\train_classifier.py data\processed\news_sentiment_final.csv models\klue-bert-qwen-sentiment
-```
-
-## 스크립트 맵
-
-| 스크립트 | 역할 |
+| 항목 | 값 |
 |---|---|
-| `collect_multi_sample.py` | 20종목 리스트(`STOCKS` dict) 정의 + 소량 테스트 수집 |
-| `collect_news_backfill.py` | 종목당 최대 1000건 뉴스 백필 (재실행 시 기존과 merge+dedup) |
-| `collect_news_curated.py` | 삼성전자·SK하이닉스 전용 일일 소량(80건) 큐레이션 수집 |
-| `collect_price_history.py` / `collect_index_history.py` | 종목/코스피 지수 1년치 주가 |
-| `match_news_price.py` | 뉴스+주가 매칭 (backfill + curated 자동 병합) |
-| `add_excess_return.py` | 코스피 대비 초과수익률 계산 (현재는 미사용 방향) |
-| `label_and_split.py` | 임계값 기반 라벨링 + 그룹셔플 split (주가 기반, 현재는 미사용 방향) |
-| `find_good_seed.py` | split 시드 탐색 (라벨 분포 균형용) |
-| `train_classifier.py` | KLUE-BERT 파인튜닝 (데이터 경로/출력 경로 인자로 받음) |
-| `pilot_qwen_labeling.py` | Qwen3 라벨링 소규모 파일럿 테스트용 |
-| `label_qwen_full.py` | Qwen3 전체 데이터 라벨링 (배치+체크포인트, 완료됨. 새 데이터 생기면 재사용) |
-| `split_qwen_labeled.py` | Qwen 라벨에서 "무관" 제외 + train/val/test 분할 (현재 파이프라인의 핵심) |
-| `check_*.py` | 각종 QA/진단 유틸리티 (분포 확인, 타임스탬프 갭 확인 등) |
+| 논조 분류 정확도 (test) | **83.5%** (F1 macro 82.2%) — 주가 직접 예측 방식(최고 38.5%) 대비 2배 이상 |
+| 수집 종목 | 20개 (7개 섹터 분산) |
+| 수집 뉴스 | 34,000+ 건 (NAVER 뉴스검색 API) |
+| 최종 학습 표본 | 24,695건 (Qwen3-4B 자동 논조 라벨링) |
+| 논조-주가 상관관계 | 통계적으로 유의(p<0.0001)하나 **효과크기는 작음**(r²<2%) — 매매 신호로 쓸 근거는 아님 |
+
+## 이 프로젝트가 보여주는 것
+
+- **실패한 가설을 인정하고 방향을 바꾼 판단력**: 뉴스 헤드라인으로 익일 주가 방향을 맞히려던 첫 시도는 찍기 확률 수준에서 벗어나지 못했습니다. 원인을 분석해 "라벨을 주가가 아니라 텍스트 자체의 논조로 재정의"하는 방향으로 전환했고, 정확도가 2배 이상 뛰었습니다.
+- **자기 검증 능력**: 종목별 성능을 점검하다가 기존 평가 방법론(train/val/test 분할)이 특정 종목들을 검증셋에서 통째로 누락시키는 버그를 스스로 발견하고 수정했습니다. "81.3%"라는 초기 결과가 사실은 일부 종목에만 편중된 수치였다는 것을 밝히고 바로잡았습니다.
+- **정직한 통계 보고**: 논조와 실제 수익률의 상관관계를 여러 시차(t+1~t+10)로 나눠 검증하며, 처음엔 과장되게 해석했던 결과("역인과관계가 확인됐다")를 효과크기 기준(Cohen's r)으로 다시 검토해 "약한 신호" 수준으로 스스로 정정했습니다.
+- **실전 도구화(RAG)**: 분류기 하나로 끝내지 않고, 임베딩 기반 유사사례 검색 + Qwen3-4B 설명 생성을 결합한 RAG 파이프라인을 FastAPI + Next.js로 구현했습니다. LLM 프롬프트에도 "확정적 예측처럼 말하지 말 것"을 명시해, 도구 자체가 결과를 과장하지 않도록 설계했습니다.
+
+## 시스템 구성
+
+```
+NAVER 뉴스 API ─┐
+                ├─▶ 뉴스-주가 매칭 ─▶ Qwen3-4B 논조 라벨링 ─▶ KLUE-BERT 파인튜닝(분류기)
+yfinance(주가) ─┘                                                    │
+                                                                      ▼
+                                        임베딩 검색(과거 유사사례 + 실제 수익률)
+                                                                      │
+                                                                      ▼
+                                    FastAPI(/analyze, /explain) ─▶ Next.js 웹 UI
+```
+
+## 기술 스택
+
+**데이터 · ML** Python · pandas · scikit-learn · Transformers · Unsloth · Qwen3-4B · KLUE-BERT · sentence-transformers
+**백엔드 · 프론트** FastAPI · Next.js · React · TypeScript
+**기타** NAVER API HUB · yfinance · RTX 4060 Ti(로컬 4bit 추론)
+
+## 더 읽어보기
+
+- [portfolio/sentiquant.html](portfolio/sentiquant.html) — 그래프·스크린샷과 함께 정리한 전체 스토리 (가장 먼저 보기 좋음)
+- [WORKLOG.md](WORKLOG.md) — 날짜별 상세 작업 기록, 시행착오, 의사결정 과정
+- [DATA_PIPELINE_RULES.md](DATA_PIPELINE_RULES.md) — 데이터 파이프라인 재실행 순서/체크리스트
+- [RAG_DEMO.md](RAG_DEMO.md) — RAG 데모 아키텍처 상세
+- [project_roadmap.md](project_roadmap.md) — 원래 계획했던 전체 로드맵
+
+## 로컬 실행
+
+```bash
+# 1. 환경
+conda activate unsloth_env   # Python 3.12, PyTorch 2.11 + CUDA 13.0
+pip install -r requirements.txt   # (또는 DATA_PIPELINE_RULES.md 참고해 개별 설치)
+
+# 2. .env에 NAVER API 키 필요 (NAVER_API_KEY_ID, NAVER_API_KEY)
+
+# 3. RAG 데모 실행 (사전 학습된 데이터/모델 필요 — DATA_PIPELINE_RULES.md 참고)
+cd api && uvicorn main:app --reload        # :8000
+cd web && npm install && npm run dev        # :3000
+```
+
+`data/`, `models/`는 용량 문제로 git에 포함하지 않았습니다. 재현하려면 DATA_PIPELINE_RULES.md의 순서대로 파이프라인을 처음부터 돌려야 합니다.
+
+## 연락채널및 기타 작업정보
+
+[github.com/dgmans21](https://github.com/dgmans21) · dgdtkjk21@gmail.com

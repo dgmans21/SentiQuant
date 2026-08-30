@@ -28,9 +28,9 @@ from collect_multi_sample import STOCKS, NAVER_NEWS_URL, NAVER_HEADERS, _strip_h
 load_dotenv()
 
 DEFAULT_TARGETS = ["삼성전자", "SK하이닉스"]
-POOL_SIZE = 300          # raw articles fetched before curation
+POOL_SIZE = 1000         # raw articles fetched before curation (API max; needed for 삼성전자's ~1000/day volume)
 PAGE_SIZE = 100
-TARGET_COUNT = 80        # curated articles kept per stock per run
+TARGET_COUNT = 300       # curated articles kept per stock per run (raised from 80 -- filter itself only leaves ~330-350/day, 80 was cutting well below that)
 TITLE_SIM_THRESHOLD = 0.6
 MAX_PER_SOURCE = 3
 OUT_PATH = "data/raw/news_daily_curated.csv"

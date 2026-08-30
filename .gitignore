@@ -5,3 +5,12 @@ __pycache__/
 *.pyc
 .venv/
 models/
+
+# web/ (Next.js)
+web/node_modules/
+web/.next/
+
+# 다른 프로젝트(Entropy645) 참고용 파일, SentiQuant와 무관
+Entropy645_포트폴리오.html
+img
+portfolio
