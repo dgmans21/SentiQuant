@@ -12,7 +12,7 @@ import pandas as pd
 import torch
 from unsloth import FastModel
 
-DATA_PATH = "data/processed/news_labeled_excess_v5.csv"
+DATA_PATH = "data/processed/news_labeled_excess_v6.csv"
 OUT_PATH = "data/processed/news_qwen_labeled.csv"
 BATCH_SIZE = 8
 CHUNK_SIZE = 1000
