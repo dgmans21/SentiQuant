@@ -13,7 +13,7 @@ import torch
 from sentence_transformers import SentenceTransformer
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
-CLASSIFIER_DIR = "models/klue-bert-qwen-sentiment-v4"
+CLASSIFIER_DIR = "models/klue-bert-qwen-sentiment-v6"
 EMBEDDER_NAME = "jhgan/ko-sroberta-multitask"
 EMB_PATH = "data/processed/news_embeddings.npy"
 META_PATH = "data/processed/news_embeddings_meta.csv"

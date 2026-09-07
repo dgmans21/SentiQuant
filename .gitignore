@@ -14,3 +14,7 @@ web/.next/
 Entropy645_포트폴리오.html
 img
 portfolio
+
+# 일회성 조사/디버그 스크립트 (재사용 목적 아님)
+scripts/check_*.py
+scripts/debug_*.py

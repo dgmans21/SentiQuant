@@ -12,7 +12,7 @@ import pandas as pd
 import torch
 from unsloth import FastModel
 
-DATA_PATH = "data/processed/news_labeled_excess_v6.csv"
+DATA_PATH = sys.argv[2] if len(sys.argv) > 2 else "data/processed/news_labeled_excess_v8.csv"
 OUT_PATH = "data/processed/news_qwen_labeled.csv"
 BATCH_SIZE = 8
 CHUNK_SIZE = 1000

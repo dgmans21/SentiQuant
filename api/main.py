@@ -1,6 +1,6 @@
 """FastAPI backend for the sentiment+RAG demo.
 
-Loads klue-bert-qwen-sentiment-v4 (classifier) and the news embedding index once
+Loads klue-bert-qwen-sentiment-v6 (classifier) and the news embedding index once
 at startup, then serves POST /analyze for the Next.js frontend to call.
 """
 import sys
