@@ -4,6 +4,8 @@ WORKLOG.md가 "무슨 일이 있었는지" 기록하는 일지라면, 이 문서
 
 ---
 
+> **2026-09-20 현황**: 데이터 수집을 이번 갱신으로 종료하고 기준일을 고정함(2026-09-19 23시경 수집분, 라벨 121,891건, RAG 임베딩 99,669건). 프로덕션 분류기는 v6 유지. 아래 절차는 재현·재개용이며, 이번 갱신에서 실제로 쓴 최소 순서는 5번 절 참고.
+
 ## 1. 파이프라인 순서 (의존관계)
 
 ```
@@ -69,4 +71,16 @@ WORKLOG.md가 "무슨 일이 있었는지" 기록하는 일지라면, 이 문서
 ## 4. 파일 버전 메모 (2026-08-28 기준)
 
 - `data/processed/news_labeled_excess_v2.csv`, `v3.csv`, `v4.csv`: Qwen 라벨링 입력용으로 임시로 만든 중간 산출물. **v4가 가장 최신(전체 21,252건 포함)**이지만, 이후 `news_price_matched.csv`가 갱신되면 v4도 다시 stale해짐 -- 재사용하지 말고 그때그때 `news_price_matched.csv`에서 새로 만들 것.
-- `models/klue-bert-qwen-sentiment` (구, 11,188건 학습) → `-v2` (12,548건, 종목 split 수정 직후) → `-v3` (18,196건, 전체 라벨링 완료 후, **현재 최종**).
+- `models/klue-bert-qwen-sentiment` (구, 11,188건 학습) → `-v2` (12,548건, 종목 split 수정 직후) → `-v3` (18,196건, 전체 라벨링 완료 후) → … → `-v6`(51,566건, **현재 프로덕션**). v7~v9는 실험용이며 채택하지 않음(v6과는 split이 달라 공정 비교 불가, v7~v9 사이는 교차평가로 비교 — README 참고).
+
+## 5. 최소 갱신 절차 (2026-09-20 실제 사용 순서)
+
+라벨링·임베딩은 가격 매칭과 독립이라 매칭 없이 진행 가능(매칭은 RAG의 수익률 부가정보·상관분석에만 쓰임).
+
+1. 수집: `collect_news_backfill.py`, `collect_news_curated.py` (API만 사용)
+2. 라벨링 입력 재생성: `prep_all_news_for_labeling.py` → `data/processed/news_all_for_labeling.csv`
+3. 라벨링: `label_qwen_full.py <건수> data/processed/news_all_for_labeling.csv` (GPU, 이미 라벨된 link는 건너뜀. 2번째 인자를 빼면 예전 스냅샷 `news_labeled_excess_v8.csv`가 입력이 되므로 주의). 속도 약 1.46~1.48건/초, 실행 전 `nvidia-smi`로 VRAM 사용률 확인
+4. 임베딩: 기존 `news_embeddings.npy`·`news_embeddings_meta.csv`를 백업한 뒤 `build_news_embeddings.py` (GPU, 약 10만 건에 3분대, 전체 재계산·덮어쓰기)
+5. 백업 동기화: `news_backfill.csv`, `news_daily_curated.csv`, `news_qwen_labeled.csv`를 `backup/`에 복사
+
+분류기 재학습이 필요한 경우에만 6·7번(split, 학습)을 추가하고, 새 라벨링이 섞이면 이전 라벨 기준과 새 라벨 기준 **둘 다**로 같은 행을 채점해 비교할 것(정답지가 바뀐 착시 방지).
